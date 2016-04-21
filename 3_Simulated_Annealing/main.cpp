@@ -25,6 +25,7 @@ double eps = 1e-6;//正温度
 double dist[100][100];
 point arr[100];
 int n;
+char* out;
 
 void input(char* filename)
 {
@@ -65,7 +66,7 @@ double cal_dist(int* array)
 	return ret;
 }
 
-double cal_df()
+double cal_df()//确定delta f，这里随机出sample个f的差值取平均计算
 {
 	double df = 0.0;
 	double current = 0.0,last = 0.0;
@@ -86,19 +87,21 @@ double cal_df()
 	return df;
 }
 
-void output(int* state,double cur_f)
+void output(int* state,double cur_f,ofstream& fout)
 {
 	for(int i = 0;i < n;i++)
 	{
-		cout << arr[state[i]].name;
+		fout << arr[state[i]].name << " ";
 	}
-	cout << " " << cur_f << endl;
+	fout << cur_f << endl;
+	fout.flush();
 }
 
 double tsp()
 {
+	ofstream fout(out);
 	double p0 = 0.9;//初始接受概率
-	double df = cal_df();
+	double df = cal_df();//利用接受概率确定初始温度
 	double t0 = df / log(1 / p0);//初始温度
 	double down_alpha = 0.95;//下降系数
 	
@@ -111,12 +114,12 @@ double tsp()
 	random_shuffle(state + 1, state + n);//随机产生一个初始解
 	double cur_f = cal_dist(state);
 	double T = t0;//温度为初始温度
-	while(T > eps)//采用0度法
+	while(T > eps)//算法终止的条件为温度降到eps这一很小的值以下，即采用0度法
 	{
 		int iter_cnt = 1;
-		output(state,cur_f);
+		output(state,cur_f,fout);
 		int ac_cnt = 0;
-		while(iter_cnt < Lk)
+		while(iter_cnt < Lk)//每一个温度下，迭代次数达到Lk就终止
 		{
 			int u = 0,v = 0;
 			while(u >= v)
@@ -146,7 +149,7 @@ double tsp()
 			cur_f = cal_dist(state);
 			double P = exp(-(new_f - cur_f) / T);
 			double tP = (double)rand() / (double)RAND_MAX;
-			if(new_f < cur_f || tP < P)
+			if(new_f < cur_f || tP < P)//状态被接受的条件：要么f减小，要么以某一概率接受
 			{
 				for(int i = 0;i < n;++i)
 				{
@@ -157,22 +160,28 @@ double tsp()
 			}
 			iter_cnt++;
 		}
-		T *= down_alpha;
+		T *= down_alpha;//温度下降采用指数下降的办法
 	}
-	output(state,cur_f);
+	output(state,cur_f,fout);
+	fout.close();
 	return cur_f;
 }
 
 int main(int argc,char** argv)
 {
-	if(argc < 2)
+	if(argc < 3)
 	{
 		cout << "Wrong input!" << endl;
-		cout << "Usage:main.exe [input file] " << endl;
+		cout << "Usage:main.exe [input file] [output file]" << endl;
 		return 0;
 	}
+	out = argv[2];
 	srand(time(NULL));
 	input(argv[1]);
-	cout << tsp() << endl;
+	tsp();
+	for(int i = 0;i < 100000000;++i)
+	{
+		
+	}
 	return 0;
 }

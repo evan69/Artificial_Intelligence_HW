@@ -1,4 +1,4 @@
-all : main.exe
+all : homework3.exe
 
-main.exe : main.cpp
-	g++ -o main main.cpp
+homework3.exe : main.cpp
+	g++ -o homework3 main.cpp
