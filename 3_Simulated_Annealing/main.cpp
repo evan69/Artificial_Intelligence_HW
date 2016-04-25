@@ -26,6 +26,7 @@ double dist[100][100];
 point arr[100];
 int n;
 char* out;
+int anspath[100];
 
 void input(char* filename)
 {
@@ -110,7 +111,10 @@ double tsp()
 	
 	int state[2*n];
 	for (int i = 0; i < n; i++)
+	{
 		state[i] = i;
+		anspath[i] = i;
+	}
 	random_shuffle(state + 1, state + n);//随机产生一个初始解
 	double cur_f = cal_dist(state);
 	double T = t0;//温度为初始温度
@@ -118,6 +122,13 @@ double tsp()
 	{
 		int iter_cnt = 1;
 		output(state,cur_f,fout);
+		if(cal_dist(state) < cal_dist(anspath))
+		{
+			for(int i = 0;i < n;++i)
+			{
+				anspath[i] = state[i];
+			}
+		}
 		int ac_cnt = 0;
 		while(iter_cnt < Lk)//每一个温度下，迭代次数达到Lk就终止
 		{
@@ -162,7 +173,14 @@ double tsp()
 		}
 		T *= down_alpha;//温度下降采用指数下降的办法
 	}
-	output(state,cur_f,fout);
+	if(cal_dist(anspath) > cal_dist(state)) output(state,cur_f,fout);
+	else
+	{
+		for(int i = 0;i < 10;++i)
+		{
+			output(anspath,cal_dist(anspath),fout);
+		}
+	}
 	fout.close();
 	return cur_f;
 }
