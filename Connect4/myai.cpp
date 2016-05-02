@@ -1,4 +1,3 @@
-
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
@@ -8,13 +7,14 @@
 #include <conio.h>
 #include <atlstr.h>
 #include <cassert>
+#include "Judge.h"
 #include "myai.h"
 using namespace std;
 
-const double C = 0.8;
+const double C = 0.9;
 const double MAX_NUM = 100000.0;
 int M, N, noX, noY;
-int root = 0;
+const int root = 1;
 int** root_board;
 int* root_top;
 int** cur_board;
@@ -48,17 +48,21 @@ struct node
 	}
 };
 
-const int MAXSIZE = 100000;
-//node tree[MAXSIZE];
-node* tree;
+const int MAXSIZE = 20000000;
+node tree[MAXSIZE];
+//node* tree;
 int treesize = 0;
+void copy_board(int** from,int** to);
 
-void choose(int** para_board,int* para_top,int col,int gamer)//gamer:1-user 2-machine
+int choose(int** para_board,int* para_top,int col,int gamer)//gamer:1-user 2-machine return choose row
 {
+	int ret = -1;
 	para_top[col]--;
 	para_board[para_top[col]][col] = gamer;
+	ret = para_top[col];
 	if(col == noY && para_top[col] == noX + 1)
 		para_top[col]--;
+	return ret;
 }
 
 void backchoose(int** para_board,int* para_top,int col)
@@ -71,16 +75,174 @@ void backchoose(int** para_board,int* para_top,int col)
 
 void cal_ucb(int index)
 {
-	//_cprintf("cal_ucb:%d\n",index);
 	node& a = tree[index];
 	if(a.visit == 0)
 	{
 		tree[index].ucb = MAX_NUM;
 		return;
 	}
-	//if(tree[a.parent].visit == 0 && index != root) _cprintf("bug\n");
+	assert(tree[a.parent].visit > 0);
 	tree[index].ucb = (double)a.win / a.visit + C * sqrt(log(tree[a.parent].visit) / a.visit);
 	//修改
+}
+
+int selection()
+{
+	int cur = root;
+	tree[cur].visit++;
+	while(tree[cur].kid.size() > 0)
+	{
+		int max_index = -1;
+		double max_ucb = -99999.9;
+		for(int i = 0;i < tree[cur].kid.size();++i)
+		{
+			cal_ucb(tree[cur].kid[i]);
+			if(tree[tree[cur].kid[i]].ucb > max_ucb)
+			{
+				max_ucb = tree[tree[cur].kid[i]].ucb;
+				max_index = tree[cur].kid[i];
+			}
+		}
+		cur_top[tree[max_index].col]--;
+		cur_board[cur_top[tree[max_index].col]][cur_top[tree[max_index].col]] = tree[cur].kind;
+		if(tree[max_index].col == noY && cur_top[tree[max_index].col] == noX + 1)
+			cur_top[tree[max_index].col]--;
+		cur = max_index;
+		tree[cur].visit++;
+	}
+	return cur;
+}
+
+int expansion(int pos)
+{
+	//_cprintf("expansion:%d\n",pos);
+	assert(pos > 0);
+	for(int i = 0;i < N;++i)
+	{
+		if(cur_top[i] > 0)
+		{
+			if(pos == 1 && cannot[i] == 1) continue;//bug:cannot 全部为1
+			if(cannot[i] == 1) continue;
+			if(treesize >= MAXSIZE - 100)
+				_cprintf(">maxsize");
+			tree[treesize].parent = pos;
+			tree[pos].kid.push_back(treesize);
+			tree[treesize].col = i;
+			if(tree[pos].kind == node::MY_ACTION)
+				tree[treesize].kind = node::OPPO_ACTION;
+			if(tree[pos].kind == node::OPPO_ACTION)
+				tree[treesize].kind = node::MY_ACTION;
+			tree[treesize].visit = 0;
+			cal_ucb(treesize);
+			treesize++;
+		}
+	}
+	assert(tree[pos].kid.size() > 0);
+	int ret = tree[pos].kid[rand() % tree[pos].kid.size()];
+	choose(cur_board,cur_top,tree[ret].col,tree[pos].kind);
+	assert(tree[ret].visit == 0);
+	tree[ret].visit = 1;
+	cal_ucb(ret);
+	return ret;
+}
+
+int simulation(int pos)
+{
+	//_cprintf("simulation:%d\n",pos);
+	//return 1;//for DEBUG
+	int result;
+	int row = -1;
+	int** local_board = new int*[M];
+	for(int i = 0;i < M;++i)
+		local_board[i] = new int[N];
+	int* local_top = new int[N];
+	copy_board(cur_board,local_board);
+	for(int i = 0;i < N;++i)
+		local_top[i] = cur_top[i];
+	if(tree[pos].kind == node::OPPO_ACTION)
+	{
+		int userturn = rand() % N;
+		while(local_top[userturn] <= 0)
+			userturn = rand() % N;
+		row = choose(local_board,local_top,userturn,node::OPPO_ACTION);
+		if(userWin(row,userturn,M,N,local_board))
+		{
+			result = 0;
+			return result;
+		}
+		if(isTie(N,local_top))
+		{
+			result = 0;
+			return result;
+		}
+	}
+	while(1)
+	{
+		int myturn = rand() % N;
+		while(local_top[myturn] <= 0)
+			myturn = rand() % N;
+		row = choose(local_board,local_top,myturn,node::MY_ACTION);
+		if(machineWin(row,myturn,M,N,local_board))
+		{
+			result = 1;
+			break;
+		}
+		if(isTie(N,local_top))
+		{
+			result = 0;
+			break;
+		}
+
+		int userturn = rand() % N;
+		while(local_top[userturn] <= 0)
+			userturn = rand() % N;
+		row = choose(local_board,local_top,userturn,node::OPPO_ACTION);
+		if(userWin(row,userturn,M,N,local_board))
+		{
+			result = 0;
+			break;
+		}
+		if(isTie(N,local_top))
+		{
+			result = 0;
+			break;
+		}
+	}
+	
+	for(int i = 0;i < M;++i)
+		delete local_board[i];
+	delete[] local_board;
+	delete local_top;
+	return result;
+}
+
+void backPropagation(int pos,int delta)
+{
+	assert(pos > 0);
+	int cur = pos;
+	int flag = 1;
+	//cal_ucb(cur);
+	//表示最大最小节点的种类
+	while(cur != root)
+	{
+		//_cprintf("back:%d\n",cur);
+		assert(cur > 0);
+		tree[cur].win += flag * delta;
+		flag = flag;
+		cal_ucb(cur);
+		cur = tree[cur].parent;
+	}
+}
+
+void copy_board(int** from,int** to)
+{
+	for(int i = 0;i < M;++i)
+	{
+		for(int j = 0;j < N;++j)
+		{
+			to[i][j] = from[i][j];
+		}
+	}
 }
 
 int simple_search()//搜索三层，返回必胜，如果无就返回-1，同时给出不可走的列
@@ -188,322 +350,103 @@ int simple_search()//搜索三层，返回必胜，如果无就返回-1，同时给出不可走的列
 	return -1;
 }
 
-int selection()
-{
-	/*
-	int* cur_top = new int[N];
-	for(int i = 0;i < N;++i)
-		cur_top[i] = root_top[i];
-	*/
-	int cur = root;
-	//_cprintf("size:%d\n",tree[cur].kid.size());
-	tree[cur].visit++;
-	while(tree[cur].kid.size() > 0)
-	{
-		//_cprintf("select cur:%d\n",cur);
-		int max_index = -1;
-		double max_ucb = -9999999.9;
-		for(int i = 0;i < tree[cur].kid.size();++i)
-		{
-			if(tree[tree[cur].kid[i]].ucb > max_ucb)
-			{
-				max_ucb = tree[tree[cur].kid[i]].ucb;
-				max_index = tree[cur].kid[i];
-			}
-		}
-		//_cprintf("select0\n");
-		cur_top[tree[max_index].col]--;
-		//_cprintf("select1\n");
-		//if(cur_top[tree[max_index].col] < 0) _cprintf("bug!!\n");
-		//if(tree[max_index].col < 0) _cprintf("bug2!!\n");
-		//_cprintf("%d %d\n",tree[max_index].col,cur_top[tree[max_index].col]);
-		//cur_board[tree[max_index].col][cur_top[tree[max_index].col]] = tree[cur].kind;//bug here
-		cur_board[cur_top[tree[max_index].col]][cur_top[tree[max_index].col]] = tree[cur].kind;
-		//_cprintf("select2\n");
-		if(tree[max_index].col == noY && cur_top[tree[max_index].col] == noX + 1)
-			cur_top[tree[max_index].col]--;
-		//_cprintf("select3\n");
-		cur = max_index;
-		//_cprintf("select4\n");
-		tree[cur].visit++;
-		//_cprintf("select5\n");
-	}
-	return cur;
-}
-
-int expansion(int pos)
-{
-	//_cprintf("expansion:%d\n",pos);
-	assert(pos > 0);
-	for(int i = 0;i < N;++i)
-	{
-		if(cur_top[i] > 0)
-		{
-			if(pos == 1 && cannot[i] == 1) continue;
-			//_cprintf("son:%d\n",treesize);
-			//if(treesize == 2) system("pause");
-			tree[treesize].parent = pos;
-			tree[pos].kid.push_back(treesize);
-			tree[treesize].col = i;
-			if(tree[pos].kind == node::MY_ACTION)
-				tree[treesize].kind = node::OPPO_ACTION;
-			if(tree[pos].kind == node::OPPO_ACTION)
-				tree[treesize].kind = node::MY_ACTION;
-			tree[treesize].visit = 0;
-			cal_ucb(treesize);
-			//_cprintf("sonucb %llf\n",tree[treesize].ucb);
-			//system("pause");
-			treesize++;
-		}
-	}
-	int ret = tree[pos].kid[rand() % tree[pos].kid.size()];
-	cur_top[tree[ret].col]--;
-	if(tree[ret].col == noY && cur_top[tree[ret].col] == noX + 1)
-		cur_top[tree[ret].col]--;
-	tree[ret].visit = 1;
-	cal_ucb(ret);
-	return ret;
-}
-
-int simulation(int pos,int** para_board)
-{
-	//_cprintf("simulation:%d\n",pos);
-	int result;
-	int** local_board = new int*[M];
-	for(int i = 0;i < M;++i)
-		local_board[i] = new int[N];
-	copy_board(para_board,local_board);
-	if(tree[pos].kind == node::OPPO_ACTION)
-	{
-		int userturn = rand() % N;
-		while(cur_top[userturn] <= 0)
-			userturn = rand() % N;
-		cur_top[userturn]--;
-		local_board[cur_top[userturn]][userturn] = 1;
-		if(tree[userturn].col == noY && cur_top[tree[userturn].col] == noX + 1)
-			cur_top[tree[userturn].col]--;
-		if(userWin(cur_top[userturn],userturn,M,N,local_board))
-		{
-			result = 0;
-			return result;
-		}
-		if(isTie(N,cur_top))
-		{
-			result = 0;
-			return result;
-		}
-	}
-	while(1)
-	{
-		int myturn = rand() % N;
-		while(cur_top[myturn] <= 0)
-			myturn = rand() % N;
-		cur_top[myturn]--;
-		local_board[cur_top[myturn]][myturn] = 2;
-		if(tree[myturn].col == noY && cur_top[tree[myturn].col] == noX + 1)
-			cur_top[tree[myturn].col]--;
-		if(machineWin(cur_top[myturn],myturn,M,N,local_board))
-		{
-			result = 1;
-			break;
-		}
-		if(isTie(N,cur_top))
-		{
-			result = 0;
-			break;
-		}
-
-		int userturn = rand() % N;
-		while(cur_top[userturn] <= 0)
-			userturn = rand() % N;
-		cur_top[userturn]--;
-		para_board[cur_top[userturn]][userturn] = 1;
-		if(tree[userturn].col == noY && cur_top[tree[userturn].col] == noX + 1)
-			cur_top[tree[userturn].col]--;
-		if(userWin(cur_top[userturn],userturn,M,N,para_board))
-		{
-			result = 0;
-			break;
-		}
-		if(isTie(N,cur_top))
-		{
-			result = 0;
-			break;
-		}
-	}
-	
-	for(int i = 0;i < M;++i)
-		delete local_board[i];
-	delete[] local_board;
-	return result;
-}
-
-void backPropagation(int pos,int delta)
-{
-	assert(pos > 0);
-	int cur = pos;
-	int flag = 1;
-	//表示最大最小节点的种类
-	while(cur != root)
-	{
-		//_cprintf("back:%d\n",cur);
-		cur = tree[cur].parent;
-		assert(cur > 0);
-		//tree[pos].visit++;
-		tree[cur].win += flag * delta;
-		flag = flag;
-		cal_ucb(cur);
-	}
-}
-
-void copy_board(int** from,int** to)
-{
-	for(int i = 0;i < M;++i)
-	{
-		for(int j = 0;j < N;++j)
-		{
-			to[i][j] = from[i][j];
-		}
-	}
-}
-
-int empty(char* a,...)
-{
-	return 0;
-}
 bool used = false;
 void hyf_getPoint(const int para_M, const int para_N, const int* top, int** board, 
 	const int lastX, const int lastY, const int para_noX, const int para_noY,int& ans_x,int& ans_y)
 {
 	AllocConsole();
 	_cprintf("cao");
-	tree = new node[MAXSIZE];
+	for(int i = 0;i < MAXSIZE;++i)
+	{
+		tree[i] = node();
+	}
+	_cprintf("cao");
 	if(!used)
 	{
+		//AllocConsole();
 		_cprintf("first");
-		srand(time(NULL));
-		AllocConsole();
+		//srand(time(NULL));
+		
 		M = para_M;
 		N = para_N;
 		noX = para_noX;
 		noY = para_noY;
+		_cprintf("first");
 		root_board = new int*[M];
 		for(int i = 0;i < M;++i)
 			root_board[i] = new int[N];
 		cur_board = new int*[M];
 		for(int i = 0;i < M;++i)
 			cur_board[i] = new int[N];
+		_cprintf("first");
 		root_top = new int[N];
 		cur_top = new int[N];
 		used = true;
 		
 	}
+	_cprintf("first\n");
 	clock_t begin = clock();
-	_cprintf("cao");
 	//初始化各个全局变量
 	copy_board(board,root_board);
 	copy_board(board,cur_board);
-	_cprintf("cao");
 	for(int i = 0;i < N;++i)
 	{
 		root_top[i] = top[i];
 		cur_top[i] = top[i];
 	}
-	_cprintf("cao");
 	//初始化根节点
-	root = 1;
 	treesize = 2;
 	tree[1] = node();//1号为根节点
 	tree[1].kind = node::MY_ACTION;
 	tree[1].col = -1;
-	_cprintf("cao");
-	/*
-	for(int i = 0;i < tree[root].kid.size();++i)
-		{
-			if(tree[tree[root].kid[i]].col == lastY)
-			{
-				root = tree[root].kid[i];
-				break;
-			}
-		}
-		*/
-	int simple_search_result = -1;
-	simple_search_result = simple_search();
-	//_cprintf("simple search:%d\n",simple_search_result);
-	for(int i = 0;i < N;++i) _cprintf("%d ",cannot[i]);
-	_cprintf("\n");
-	/*
-	if(simple_search_result > -1)
+	double totaltime = 0;
+	int cnt = 0;
+	//int simple_search_result = simple_search();
+	bool allone = true;
+	for(int i = 0;i < N;++i)
 	{
-		ans_y = simple_search_result;
-		ans_x = root_top[simple_search_result] - 1;
-		//_cprintf("ans:%d %d\n",ans_x,ans_y);
+		if(cannot[i] == 0) allone = false;
+		_cprintf("%d ",cannot[i]);
+	}
+	
+	if(allone)
+	{
+		ans_y = rand() % N;
+		while(root_top[ans_y] <= 0) ans_y = rand() % N;
+		ans_x = root_top[ans_y] - 1;
 		return;
 	}
-	*/
-	double totaltime;
-	while(1)
+	
+	while(totaltime < 4.5)
 	{
-		//计时
 		clock_t end = clock();
 		totaltime = (double)(end - begin)/ CLOCKS_PER_SEC;
-		_cprintf("%llf\n",totaltime);
-		if(totaltime > 4.5) break;
-		//以下重新产生cur_board和cur_top
 		copy_board(board,cur_board);
 		for(int i = 0;i < N;++i)
 			cur_top[i] = root_top[i];
 		//选取节点
 		int to_expand = selection();
 		int pos = expansion(to_expand);
-		int result = simulation(pos,cur_board);
+		int result = simulation(pos);
 		tree[pos].visit++;
 		tree[pos].win += result;
 		cal_ucb(pos);
 		backPropagation(pos,result);
 	}
-	if(simple_search_result > -1)
-	{
-		_cprintf("search a solu\n");
-		ans_y = simple_search_result;
-		ans_x = root_top[simple_search_result] - 1;
-		for(int i = 0;i < tree[root].kid.size();++i)
-		{
-			if(ans_y == tree[tree[root].kid[i]].col)
-			{
-				root = tree[root].kid[i];
-				break;
-			}
-		}
-		delete[] tree;
-		return;
-	}
-	int max_index = -1;
+	int max_col = -1;
 	double max_ratio = -999999.9;
+	_cprintf("visit:%d\n",tree[root].visit);
 	for(int i = 0;i < tree[root].kid.size();++i)
 	{
-		//_cprintf("ucb:%llf ",tree[tree[root].kid[i]].ucb);
-		//_cprintf("sonwin:%d sonvisit:%d\n",tree[tree[root].kid[i]].win,tree[tree[root].kid[i]].visit);
+		int index = tree[root].kid[i];
 		double cur_ratio = (double)tree[tree[root].kid[i]].win / (tree[tree[root].kid[i]].visit);
-		//_cprintf("ratio:%llf\n",cur_ratio);
-		if(cannot[tree[tree[root].kid[i]].col] == 0 && cur_ratio > max_ratio)
+		_cprintf("visit:%d win:%d ratio:%llf ucb:%llf\n",tree[index].visit,tree[index].win,cur_ratio,tree[index].ucb);
+		if(cannot[tree[index].col] == 0 && cur_ratio > max_ratio)
 		{
 			max_ratio = cur_ratio;
-			max_index = tree[root].kid[i];
+			max_col = tree[tree[root].kid[i]].col;
 		}
 	}
-	if(max_index == -1)
-	{
-		max_index = rand() % N;
-		while(root_top[max_index] <= 0)
-		{
-			max_index = rand() % N;
-		}
-	}
-	root = max_index;
-	_cprintf("max index:%d\n",max_index);
-	ans_y = tree[max_index].col;
+	ans_y = max_col;
 	ans_x = root_top[ans_y] - 1;
-	_cprintf("ans:%d %d\n",ans_x,ans_y);
-	delete[] tree;
 }
