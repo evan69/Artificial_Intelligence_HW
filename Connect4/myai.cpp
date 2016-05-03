@@ -11,10 +11,11 @@
 #include "myai.h"
 using namespace std;
 
-const double C = 0.9;
+//const double C = 0.8;
+const double C = 0.8;
 const double MAX_NUM = 100000.0;
 int M, N, noX, noY;
-const int root = 1;
+ int root = 1;
 int** root_board;
 int* root_top;
 int** cur_board;
@@ -37,6 +38,7 @@ struct node
 	//儿子
 	double ucb;
 	//信心上限值
+	bool gameover;
 	node()
 	{
 		kind = UN_INIT;
@@ -45,6 +47,7 @@ struct node
 		parent = 0;
 		col = -1;
 		ucb = 0;
+		gameover = false;//是否是已经分出胜负的节点
 	}
 };
 
@@ -52,12 +55,14 @@ const int MAXSIZE = 20000000;
 node tree[MAXSIZE];
 //node* tree;
 int treesize = 0;
+bool choose_gameover_node = false;
 void copy_board(int** from,int** to);
 
 int choose(int** para_board,int* para_top,int col,int gamer)//gamer:1-user 2-machine return choose row
 {
 	int ret = -1;
 	para_top[col]--;
+	assert(para_board[para_top[col]][col] == 0);
 	para_board[para_top[col]][col] = gamer;
 	ret = para_top[col];
 	if(col == noY && para_top[col] == noX + 1)
@@ -82,7 +87,7 @@ void cal_ucb(int index)
 		return;
 	}
 	assert(tree[a.parent].visit > 0);
-	tree[index].ucb = (double)a.win / a.visit + C * sqrt(log(tree[a.parent].visit) / a.visit);
+	tree[index].ucb = (double)a.win / a.visit + C * sqrt(2.0 * log(tree[a.parent].visit) / a.visit);
 	//修改
 }
 
@@ -103,12 +108,22 @@ int selection()
 				max_index = tree[cur].kid[i];
 			}
 		}
+		/*
 		cur_top[tree[max_index].col]--;
 		cur_board[cur_top[tree[max_index].col]][cur_top[tree[max_index].col]] = tree[cur].kind;
 		if(tree[max_index].col == noY && cur_top[tree[max_index].col] == noX + 1)
 			cur_top[tree[max_index].col]--;
+		*/
+		choose(cur_board,cur_top,tree[max_index].col,tree[cur].kind);
 		cur = max_index;
 		tree[cur].visit++;
+		//have added code here
+		if(tree[cur].gameover == true)
+		{
+			choose_gameover_node = true;
+			return cur;
+		}
+		//--------------------
 	}
 	return cur;
 }
@@ -121,8 +136,8 @@ int expansion(int pos)
 	{
 		if(cur_top[i] > 0)
 		{
-			if(pos == 1 && cannot[i] == 1) continue;//bug:cannot 全部为1
-			if(cannot[i] == 1) continue;
+			if(pos == root && cannot[i] == 1) continue;//bug:cannot 全部为1
+			//if(cannot[i] == 1) continue;
 			if(treesize >= MAXSIZE - 100)
 				_cprintf(">maxsize");
 			tree[treesize].parent = pos;
@@ -134,6 +149,20 @@ int expansion(int pos)
 				tree[treesize].kind = node::MY_ACTION;
 			tree[treesize].visit = 0;
 			cal_ucb(treesize);
+			//have added code here
+			int row = choose(cur_board,cur_top,i,tree[pos].kind);
+			if(tree[pos].kind == node::OPPO_ACTION)
+			{
+				if(userWin(row,i,M,N,cur_board))
+					tree[treesize].gameover = true;
+			}
+			if(tree[pos].kind == node::MY_ACTION)
+			{
+				if(machineWin(row,i,M,N,cur_board))
+					tree[treesize].gameover = true;
+			}
+			backchoose(cur_board,cur_top,i);
+			//--------------------
 			treesize++;
 		}
 	}
@@ -143,6 +172,10 @@ int expansion(int pos)
 	assert(tree[ret].visit == 0);
 	tree[ret].visit = 1;
 	cal_ucb(ret);
+	//have added code here
+	if(tree[ret].gameover == true)
+		choose_gameover_node = true;
+	//--------------------
 	return ret;
 }
 
@@ -227,8 +260,18 @@ void backPropagation(int pos,int delta)
 	{
 		//_cprintf("back:%d\n",cur);
 		assert(cur > 0);
+		/*
 		tree[cur].win += flag * delta;
-		flag = flag;
+		flag = -flag;
+		*/
+		//added
+		tree[cur].win += 2*delta - 1;
+		/*
+		if(flag == 1) tree[cur].win += delta;
+		else tree[cur].win += (1 - delta);
+		flag = 1 - flag;
+		*/
+		//-----
 		cal_ucb(cur);
 		cur = tree[cur].parent;
 	}
@@ -354,12 +397,15 @@ bool used = false;
 void hyf_getPoint(const int para_M, const int para_N, const int* top, int** board, 
 	const int lastX, const int lastY, const int para_noX, const int para_noY,int& ans_x,int& ans_y)
 {
+	clock_t begin = clock();
 	AllocConsole();
 	_cprintf("cao");
+	
 	for(int i = 0;i < MAXSIZE;++i)
 	{
 		tree[i] = node();
 	}
+	
 	_cprintf("cao");
 	if(!used)
 	{
@@ -381,11 +427,28 @@ void hyf_getPoint(const int para_M, const int para_N, const int* top, int** boar
 		_cprintf("first");
 		root_top = new int[N];
 		cur_top = new int[N];
+		//root = 1;
+		treesize = 2;
+		tree[root] = node();//1号为根节点
+		tree[root].kind = node::MY_ACTION;
+		tree[root].col = -1;
 		used = true;
+	}
+	else
+	{
 		
+		treesize = 2;
+		tree[root] = node();//1号为根节点
+		tree[root].kind = node::MY_ACTION;
+		tree[root].col = -1;
+		/*
+		for(int i = 0;i < tree[root].kid.size();++i)
+			if(tree[tree[root].kid[i]].col == lastY)
+				root = tree[root].kid[i];
+		*/
 	}
 	_cprintf("first\n");
-	clock_t begin = clock();
+	
 	//初始化各个全局变量
 	copy_board(board,root_board);
 	copy_board(board,cur_board);
@@ -395,11 +458,8 @@ void hyf_getPoint(const int para_M, const int para_N, const int* top, int** boar
 		cur_top[i] = top[i];
 	}
 	//初始化根节点
-	treesize = 2;
-	tree[1] = node();//1号为根节点
-	tree[1].kind = node::MY_ACTION;
-	tree[1].col = -1;
 	double totaltime = 0;
+	/*
 	int cnt = 0;
 	//int simple_search_result = simple_search();
 	bool allone = true;
@@ -416,7 +476,7 @@ void hyf_getPoint(const int para_M, const int para_N, const int* top, int** boar
 		ans_x = root_top[ans_y] - 1;
 		return;
 	}
-	
+	*/
 	while(totaltime < 4.5)
 	{
 		clock_t end = clock();
@@ -425,16 +485,40 @@ void hyf_getPoint(const int para_M, const int para_N, const int* top, int** boar
 		for(int i = 0;i < N;++i)
 			cur_top[i] = root_top[i];
 		//选取节点
+		choose_gameover_node = false;//add
 		int to_expand = selection();
+		if(choose_gameover_node == true)
+		{
+			if(tree[to_expand].kind == node::MY_ACTION) backPropagation(to_expand,0);
+			if(tree[to_expand].kind == node::OPPO_ACTION) backPropagation(to_expand,1);
+			continue;
+		}//add
 		int pos = expansion(to_expand);
+		if(choose_gameover_node == true)
+		{
+			if(tree[pos].kind == node::MY_ACTION) backPropagation(pos,0);
+			if(tree[pos].kind == node::OPPO_ACTION) backPropagation(pos,1);
+			continue;
+		}//add
 		int result = simulation(pos);
-		tree[pos].visit++;
-		tree[pos].win += result;
+		//tree[pos].visit++;
+		//tree[pos].win += result;
 		cal_ucb(pos);
 		backPropagation(pos,result);
+		/*
+		_cprintf("treesize:%d\n",treesize);
+		_cprintf("visit:%d\n",tree[root].visit);
+		for(int i = 0;i < tree[root].kid.size();++i)
+		{
+			int index = tree[root].kid[i];
+			_cprintf("visit:%d win:%d ucb:%llf\n",tree[index].visit,tree[index].win,tree[index].ucb);
+		}
+		_cprintf("---------------------------------\n");
+		*/
 	}
 	int max_col = -1;
-	double max_ratio = -999999.9;
+	double max_ratio = -9999.9;
+	_cprintf("treesize:%d\n",treesize);
 	_cprintf("visit:%d\n",tree[root].visit);
 	for(int i = 0;i < tree[root].kid.size();++i)
 	{
@@ -445,6 +529,8 @@ void hyf_getPoint(const int para_M, const int para_N, const int* top, int** boar
 		{
 			max_ratio = cur_ratio;
 			max_col = tree[tree[root].kid[i]].col;
+			//change root
+			//root = tree[root].kid[i];
 		}
 	}
 	ans_y = max_col;
