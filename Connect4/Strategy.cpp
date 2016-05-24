@@ -2,6 +2,7 @@
 #include "Point.h"
 #include "Strategy.h"
 #include "myai.h"
+//#include "MC.h"
 using namespace std;
 
 /*
@@ -54,7 +55,7 @@ extern "C" __declspec(dllexport) Point* getPoint(const int M, const int N, const
 		}
 	}
     */
-	
+	//getPoint(M,N,top,board,noX,noY,lastX, lastY, x, y);
 	hyf_getPoint(M,N,top,board,lastX,lastY,noX,noY,x,y);
 	/*
 		不要更改这段代码
