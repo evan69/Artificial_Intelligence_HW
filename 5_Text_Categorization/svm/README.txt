@@ -1,0 +1,11 @@
+说明：
+本代码使用了libSVM，这是台湾大学林智仁(Lin Chih-Jen)教授等开发设计的一个简单、易于使用和快速有效的SVM模式识别与回归的软件包
+本目录下的hyf_svm.py为源代码，report.xlsx为报告，data文件夹下为被提供的训练数据，libSVM为用到的SVM包，README.txt为说明文件
+
+执行
+python hyf_svm.py
+即可以十折交叉验证的方式运行基于SVM的文本分类算法，该算法把所有数据随机分成十个集合，
+分别以某个集合为测试集，剩下集合为训练集进行训练，将生成的训练集向量保存在HYF_train0.txt~HYF_train9.txt中，
+测试集向量保存在HYF_test0.txt~HYF_test9.txt中，并利用libSVM的python接口对这些数据进行学习和测试，把十次的测试结果输出到命令行，
+把十次的测试集信息和训练集信息（包括正确分类和测试结果一一对应）输出到output.csv表格中。
+命令行最后输出的Totally Accuracy后面的数值为十次的整体正确率
