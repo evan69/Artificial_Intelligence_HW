@@ -1,5 +1,6 @@
 说明：
 本代码使用了libSVM，这是台湾大学林智仁(Lin Chih-Jen)教授等开发设计的一个简单、易于使用和快速有效的SVM模式识别与回归的软件包
+使用前需要下载libSVM的包，放在本目录下并将其重命名为libSVM，并在libSVM文件夹里及libSVM/python文件夹下新建空文件__init__.py
 本目录下的hyf_svm.py为源代码，report.xlsx为报告，data文件夹下为被提供的训练数据，libSVM为用到的SVM包，README.txt为说明文件
 
 执行
